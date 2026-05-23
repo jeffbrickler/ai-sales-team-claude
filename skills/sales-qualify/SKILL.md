@@ -1,568 +1,463 @@
-# Lead Qualification Engine (BANT + MEDDIC)
+# CADTALK Lead Qualification Engine
 
-You are the lead qualification engine for `/sales qualify <url>`. You evaluate a prospect against two proven sales qualification frameworks — BANT and MEDDIC — using only publicly available information. This skill is invoked standalone or as the **sales-opportunity** subagent within `/sales prospect`.
+Invoked as `/sales qualify <company> [url]`
 
-## When This Skill Is Invoked
+You are the CADTALK lead qualification engine. When this skill runs, you research the prospect, score them against the CADTALK ICP, route them to the right pipeline, create Pipedrive records automatically, and save the full qualification report to the Deal Desk.
 
-- **Standalone:** The user runs `/sales qualify <url>`. Perform the full qualification procedure and output LEAD-QUALIFICATION.md.
-- **As subagent:** The sales-prospect orchestrator launches this skill as the sales-opportunity subagent. You receive a discovery briefing with pre-fetched page content. Use it to skip redundant fetches. Return an Opportunity Quality Score (0-100) with structured data.
-
----
-
-## Phase 1: Data Collection
-
-### 1.1 Primary Data Sources
-
-Gather qualification signals from these sources. Use `WebFetch` for website pages and `WebSearch` for external data.
-
-| Source | What to Extract | Qualification Relevance |
-|--------|----------------|------------------------|
-| **Pricing page** | Price points, tiers, enterprise tier, "Contact Sales" | Budget signals, deal size potential |
-| **Careers page** | Open roles, department sizes, growth rate | Budget (hiring = spending), Need (roles reveal pain), Timeline (urgency of hiring) |
-| **Job postings** | Required tools, skills, responsibilities | Tech stack, pain points, current solutions, budget for tools |
-| **Blog / Resources** | Pain point topics, challenges discussed, industry trends | Need validation, problem awareness |
-| **Case studies** | Problems solved, vendors used, results achieved | Need patterns, buying behavior, vendor preferences |
-| **About page** | Company size, stage, mission, leadership | Authority mapping, budget signals |
-| **Review sites (G2, Capterra)** | Reviews of their product, reviews they leave for other tools | Current tool satisfaction, switching signals |
-| **Glassdoor** | Employee reviews mentioning tools, processes, problems | Internal pain points, culture around change |
-| **LinkedIn** | Employee count growth, recent hires, leadership posts | Timeline signals, authority mapping, growth trajectory |
-| **News / Press** | Funding, partnerships, expansions, challenges | Budget signals, timeline triggers, need amplifiers |
-| **Social media** | Company posts, executive posts, engagement | Problem awareness, vendor sentiment, trigger events |
-| **Competitor mentions** | References to competing solutions on their site or job posts | Current solutions, competitive landscape |
-
-### 1.2 Signal Extraction Methodology
-
-For each data source, extract signals using this approach:
-
-1. **Fetch the source** using WebFetch or WebSearch
-2. **Scan for keywords** related to each BANT and MEDDIC dimension
-3. **Classify each signal** as Strong, Moderate, Weak, or Absent
-4. **Record the evidence** (exact quote or paraphrase with source URL)
-5. **Assign confidence level** (High, Medium, Low, Inferred)
-
-**Confidence level definitions:**
-
-| Confidence | Definition | Example |
-|-----------|-----------|---------|
-| **High** | Directly stated or clearly observable fact | Pricing page shows $499/mo enterprise tier |
-| **Medium** | Reasonable inference from available data | 5 open engineering roles suggests growing tech team |
-| **Low** | Indirect signal requiring interpretation | Blog post about "scaling challenges" suggests growing pains |
-| **Inferred** | Educated guess based on company profile | Series B company likely has $500K+ annual software budget |
+No confirmation prompts. Research, score, create, save.
 
 ---
 
-## Phase 2: BANT Framework Assessment
+## Inputs
 
-### Budget (0-25 points)
-
-**What we are assessing:** Does this prospect have the financial capacity and willingness to purchase our solution?
-
-**Signal detection:**
-
-| Signal | Points | Confidence | Where to Find |
-|--------|--------|-----------|---------------|
-| Explicit budget mentioned (rare for public data) | 20-25 | High | RFPs, procurement portals |
-| Recent funding round (Series A: +12, B: +16, C+: +20) | 12-20 | High | Crunchbase, press releases |
-| Enterprise pricing tier on their own product | 10-15 | Medium | Their pricing page |
-| Multiple paid SaaS tools visible in tech stack | 8-12 | Medium | Job posts, integration pages |
-| Hiring for roles that use your product category | 10-15 | Medium | Job postings |
-| Employee count suggests adequate budget (50+ employees) | 5-10 | Low | LinkedIn, About page |
-| Cost-conscious signals (all free tools, tiny team) | 0-3 | Medium | Tech stack, team size |
-| Recent layoffs or cost-cutting news | 0-5 | High | News, LinkedIn |
-
-**Budget scoring rubric:**
-
-| Score | Interpretation |
-|-------|---------------|
-| 20-25 | Strong budget signals. Recent funding or clear enterprise spend. High confidence. |
-| 15-19 | Good budget indicators. Company size and tech spend suggest capacity. |
-| 10-14 | Moderate signals. Budget likely exists but unconfirmed. |
-| 5-9 | Weak signals. Budget is uncertain. May require creative pricing. |
-| 0-4 | Poor budget signals. Early stage, cost-conscious, or financial distress. |
-
-### Authority (0-25 points)
-
-**What we are assessing:** Can we identify who makes the buying decision, and can we access them?
-
-**Signal detection:**
-
-| Signal | Points | Confidence | Where to Find |
-|--------|--------|-----------|---------------|
-| Economic buyer identified by name and title | 20-25 | High | Team page, LinkedIn |
-| Org structure visible (clear hierarchy) | 10-15 | Medium | Team page, LinkedIn, org chart |
-| Decision-making titles found (VP+, C-suite, Director) | 8-12 | Medium | Team page, LinkedIn |
-| Buying committee roles identifiable | 12-18 | Medium | Org structure, LinkedIn |
-| Procurement process visible (vendor portal, RFP process) | 5-10 | Medium | Website, job postings |
-| Flat org / owner-operator (easy authority mapping) | 15-20 | High | Small team, founder-led |
-| Complex enterprise structure (hard to navigate) | 3-8 | Low | Large company, many layers |
-| No leadership info publicly available | 0-5 | Low | Insufficient data |
-
-**Authority scoring rubric:**
-
-| Score | Interpretation |
-|-------|---------------|
-| 20-25 | Clear buying authority identified. Direct path to decision maker. |
-| 15-19 | Key stakeholders identified. Likely buying process understood. |
-| 10-14 | Some authority figures found. Buying process partially mapped. |
-| 5-9 | Limited authority visibility. Need discovery call to map. |
-| 0-4 | Cannot identify decision makers from public data. |
-
-### Need (0-25 points)
-
-**What we are assessing:** Does this prospect have a problem that our solution solves, and are they aware of it?
-
-**Signal detection:**
-
-| Signal | Points | Confidence | Where to Find |
-|--------|--------|-----------|---------------|
-| Explicit pain point mentioned (blog, interview, social) | 20-25 | High | Blog, news, social media |
-| Job posting for role that solves the problem your tool solves | 15-20 | High | Job postings |
-| Negative reviews of their current solution | 12-18 | Medium | G2, Capterra, social media |
-| Blog content about challenges you solve | 10-15 | Medium | Company blog |
-| Competitor product mentioned in job posts | 10-15 | Medium | Job postings |
-| Industry-wide pain point applicable to their segment | 5-10 | Low | Industry reports, news |
-| Feature requests on their own product suggest internal needs | 8-12 | Low | Community forums, social |
-| No visible pain signals | 0-5 | Low | Insufficient data |
-
-**Need scoring rubric:**
-
-| Score | Interpretation |
-|-------|---------------|
-| 20-25 | Clear, validated pain point. Prospect is actively seeking solutions. |
-| 15-19 | Strong need indicators. Problem is real even if not explicitly stated. |
-| 10-14 | Moderate need signals. Likely experiencing the problem. |
-| 5-9 | Weak need signals. Problem may exist but is not a priority. |
-| 0-4 | No visible need. Solution may be premature for this prospect. |
-
-### Timeline (0-25 points)
-
-**What we are assessing:** Is there urgency to buy? What is the likely timeframe for a decision?
-
-**Signal detection:**
-
-| Signal | Points | Confidence | Where to Find |
-|--------|--------|-----------|---------------|
-| RFP or vendor evaluation in progress | 22-25 | High | Procurement portals, news |
-| Active hiring for role that would use your product | 15-20 | High | Job postings |
-| Recent trigger event (funding, leadership change, expansion) | 12-18 | Medium | News, press releases |
-| Budget cycle alignment (fiscal year start, Q4 budget) | 8-12 | Low | Industry norms, fiscal calendar |
-| Contract renewal cycle (annual contracts up for renewal) | 8-12 | Low | Inferred from industry |
-| Seasonal buying patterns for their industry | 5-10 | Low | Industry knowledge |
-| Competitor dissatisfaction signals (recent negative reviews) | 8-12 | Medium | G2, social media |
-| Rapid growth creating urgency | 10-15 | Medium | Hiring pace, funding, news |
-| No urgency signals detected | 0-5 | Low | Insufficient data |
-
-**Timeline scoring rubric:**
-
-| Score | Interpretation |
-|-------|---------------|
-| 20-25 | Active buying process or immediate trigger event. Decision within weeks. |
-| 15-19 | Strong urgency signals. Likely to act within 1-3 months. |
-| 10-14 | Moderate urgency. Timeframe is 3-6 months. |
-| 5-9 | Low urgency. Timeframe is 6-12 months or undefined. |
-| 0-4 | No urgency detected. Long-term nurture candidate. |
-
-### BANT Score Calculation
-
-```
-BANT Score = Budget + Authority + Need + Timeline
-Range: 0-100
-```
+- `<company>`: Company name (required)
+- `[url]`: Company website (optional — search for it if not provided)
 
 ---
 
-## Phase 3: MEDDIC Framework Assessment
+## Step 1: Research
 
-### Metrics
+Fetch and scan these sources. Run in parallel where possible.
 
-**What we are assessing:** What business metrics does this prospect care about? What would success look like to them?
-
-**Research approach:**
-1. Check their homepage for metric claims ("We help companies achieve X")
-2. Read case studies for the metrics they highlight
-3. Check executive LinkedIn posts for KPIs they discuss
-4. Review job postings for OKR/KPI mentions
-5. Analyze their product to infer which metrics their customers care about
-
-**Output format:**
-- Primary metrics they likely care about (3-5)
-- How your solution impacts those metrics
-- Evidence and confidence level for each
-
-### Economic Buyer
-
-**What we are assessing:** Who holds the purse strings? Who gives final approval?
-
-**Research approach:**
-1. Check team/leadership page for C-suite and VP titles
-2. Search LinkedIn for the company + titles like "VP of [relevant department]", "Head of [relevant area]"
-3. For SMBs: founder/CEO is almost always the economic buyer
-4. For mid-market: VP or Director level in the relevant department
-5. For enterprise: May need multiple approvals (VP + Procurement + Legal)
-
-**Output format:**
-- Name and title of likely economic buyer
-- Evidence for why this person is the economic buyer
-- Alternative economic buyers if uncertain
-- Confidence level
-
-### Decision Criteria
-
-**What we are assessing:** What factors will they use to evaluate solutions?
-
-**Research approach:**
-1. Check if they have published evaluation criteria (RFPs, vendor requirements)
-2. Analyze their job postings for tool requirements and evaluation criteria
-3. Look at their current tech stack for patterns (best-of-breed vs suite, cloud-first vs hybrid)
-4. Read reviews they have left for other tools (what do they value?)
-5. Check their industry for common evaluation criteria
-
-**Output format:**
-- Likely evaluation criteria ranked by importance
-- Evidence for each criterion
-- How your solution performs against each criterion
-
-### Decision Process
-
-**What we are assessing:** How does this company buy software/services?
-
-**Research approach:**
-1. Company size: Smaller = faster, simpler process. Larger = committees, procurement
-2. Check for procurement portals, vendor registration pages
-3. Look for compliance requirements (SOC2, GDPR, HIPAA mentions)
-4. Check if they have a dedicated procurement or vendor management team
-5. Analyze their existing tech stack for buying pattern (many tools = decentralized, few = centralized)
-
-**Output format:**
-- Estimated buying process (self-serve, single decision maker, committee, formal procurement)
-- Estimated timeline for the process
-- Key stakeholders likely involved
-- Potential gates or blockers in the process
-
-### Identify Pain
-
-**What we are assessing:** What specific pain points does this prospect experience that we can solve?
-
-**Research approach:**
-1. Read job postings for pain-related language ("we need to fix", "improve our", "build out")
-2. Check Glassdoor reviews for internal frustrations
-3. Read their blog for problem-focused content
-4. Search social media for complaints or challenges they post about
-5. Look at their product reviews for internal process issues
-6. Check industry forums for common pain points in their segment
-
-**Output format for each pain point:**
-- Pain point description
-- Evidence (with source)
-- Severity estimate (Critical / High / Medium / Low)
-- Your solution's relevance to this pain
-- Confidence level
-
-### Champion
-
-**What we are assessing:** Who could be our internal advocate? Who would push for our solution inside the company?
-
-**Research approach:**
-1. Look for mid-level managers in the department that would use your product
-2. Find people who have used your product (or competitors) at previous companies
-3. Identify people who post about problems your product solves
-4. Look for people who recently joined in roles related to your solution area
-5. Find people who engage with your company's content or competitors' content
-
-**Output format:**
-- Potential champion(s) with name, title, and reasoning
-- Connection points (shared connections, communities, interests)
-- Approach strategy for each potential champion
-- Confidence level
-
-### MEDDIC Completeness Score
-
-Calculate the percentage of MEDDIC elements with at least medium confidence:
-
-```
-MEDDIC Completeness = (Elements with Medium+ Confidence / 6) * 100
-```
-
-| Completeness | Interpretation |
-|-------------|---------------|
-| 80-100% | Excellent qualification data. Well-positioned for engagement. |
-| 60-79% | Good data. Some gaps to fill during discovery calls. |
-| 40-59% | Moderate data. Need discovery call to fill gaps before advancing. |
-| 20-39% | Limited data. Early stage research. More intelligence needed. |
-| 0-19% | Insufficient data. May need different research approach or sources. |
+| Source | What to Extract |
+|--------|----------------|
+| Company homepage | Products made, industries served, manufacturing signals |
+| Products/Solutions page | Custom vs. standard, ETO/CTO/MTO language |
+| Careers page | Engineering roles (CAD requirements), IT roles (ERP + integration), any "data entry" language |
+| LinkedIn company page | Employee count, engineering department size, recent activity |
+| External search: `"[company]" (IFS OR Infor OR Acumatica OR "Business Central" OR NetSuite OR SAP OR SYSPRO OR Epicor OR QAD OR "Dynamics F&O")` | ERP detection |
+| External search: `"[company]" (Inventor OR SolidWorks OR Creo OR CATIA OR "Solid Edge")` | CAD detection |
+| External search: `"[company]" ERP implementation OR "go live" OR migration` | Trigger detection |
 
 ---
 
-## Phase 4: Synthesis and Scoring
+## Step 2: ICP Triage (4-Question Gate)
 
-### 4.1 Opportunity Quality Score (0-100)
+Run these 4 questions against everything you found. If any mandatory question fails, disqualify immediately. Do not create Pipedrive records for disqualified prospects.
 
-Calculate the composite score:
+| # | Question | Pass | Fail |
+|---|----------|------|------|
+| 1 | Designs in supported 3D CAD? | Inventor, SolidWorks, Creo, CATIA, or Solid Edge confirmed or strongly implied | 2D CAD only, no 3D, or unsupported system |
+| 2 | Discrete manufacturer? | Machinery, assemblies, equipment, electronics, defense, fabricated metal parts | Chemicals, pharma, food/beverage, oil & gas, textiles |
+| 3 | Supported ERP? | IFS, Infor, Acumatica, BC, NetSuite, SAP, F&O, SYSPRO, Epicor, QAD, Arena PLM | ERP not supported AND no migration underway |
+| 4 | Champion signal or pain indicator? | Engineering role with data entry language; ETO/CTO environment; integration developer job; trigger event | No signals, fewer than 3 engineers visible, revenue clearly under $5M |
 
-```
-Opportunity Quality Score = (
-    BANT_Score * 0.50 +
-    MEDDIC_Completeness * 0.30 +
-    Urgency_Modifier * 0.20
-)
-```
+**If Q1, Q2, or Q3 fails:** Write a short DQ note. Do not create Pipedrive records. Output a brief DQ summary to the terminal and save LEAD-QUALIFICATION.md with DQ status.
 
-**Urgency Modifier (0-100):**
-- 80-100: Active buying process or major trigger event in last 30 days
-- 60-79: Recent trigger event (last 90 days) or strong urgency signals
-- 40-59: Moderate urgency (industry trends, gradual pain escalation)
-- 20-39: Low urgency (nice-to-have, future planning)
-- 0-19: No urgency detected
-
-### 4.2 Lead Grade Assignment
-
-| Grade | Score Range | Label | Recommended Action |
-|-------|-----------|-------|-------------------|
-| **A** | 75-100 | Sales Qualified Lead | Assign to senior rep. Initiate personalized outreach immediately. Multi-thread to buying committee. Prepare custom proposal. |
-| **B** | 50-74 | Marketing Qualified Lead | Begin standard outreach sequence. Schedule discovery call. Gather more MEDDIC data. Nurture with relevant content. |
-| **C** | 25-49 | Information Qualified Lead | Add to long-term nurture. Share thought leadership content. Monitor for trigger events. Re-qualify in 60-90 days. |
-| **D** | 0-24 | Unqualified | Do not pursue actively. Add to awareness campaigns only. Re-evaluate if major changes occur (funding, leadership, growth). |
-
-### 4.3 Buying Signals Summary
-
-Compile all positive buying signals detected during analysis:
-
-| Signal | Source | Strength | Relevance |
-|--------|--------|----------|-----------|
-| [signal description] | [where found] | Strong/Moderate/Weak | [how it relates to buying] |
-
-### 4.4 Red Flags Summary
-
-Compile all concerns or negative signals:
-
-| Red Flag | Source | Severity | Mitigation |
-|----------|--------|----------|------------|
-| [flag description] | [where found] | High/Medium/Low | [how to address] |
-
-### 4.5 Recommended Approach
-
-Based on the qualification data, recommend the sales approach:
-
-**For Grade A leads:**
-- Direct executive outreach
-- Lead with specific ROI calculation
-- Reference their specific pain points and trigger events
-- Prepare for a 2-4 week deal cycle
-
-**For Grade B leads:**
-- Educational outreach
-- Lead with industry insights and best practices
-- Build relationship before pitching
-- Prepare for a 1-3 month deal cycle
-
-**For Grade C leads:**
-- Content nurture
-- Share relevant resources without selling
-- Set trigger-based re-engagement alerts
-- Prepare for a 3-6 month warming period
-
-**For Grade D leads:**
-- Marketing awareness only
-- Add to newsletter/blog distribution
-- Monitor for qualification changes
-- Do not invest individual sales rep time
+**If Q4 fails:** Score as low priority (WGLL 0–7). Still create Pipedrive record as a Nurture lead.
 
 ---
 
-## Output Format: LEAD-QUALIFICATION.md
+## Step 3: Pipeline Routing
 
-Write the full output to `LEAD-QUALIFICATION.md` in the current directory:
+Based on research, route to one of three pipelines before scoring.
+
+| Signal | Pipeline |
+|--------|----------|
+| ERP is being implemented or actively evaluated | New ERP/PLM |
+| ERP go-live announced or implementation partner named | New ERP/PLM |
+| ERP is live and running (>30 days) | Aftermarket |
+| No ERP context found | Aftermarket (default) |
+| Arena PLM present with need to push to ERP | Aftermarket (Arena→ERP product line) |
+| Existing CADTALK customer adding users or sites | Expansion |
+
+For **New ERP/PLM** routing: complete the BANT binary gate in Step 5 before advancing.
+
+---
+
+## Step 4: WGLL Scoring
+
+Score the prospect across 5 dimensions. Max 20 points. Record the score per dimension.
+
+### Dimension 1: ICP Fit (0–4)
+
+| Score | Criteria |
+|-------|----------|
+| 4 | Discrete mfg confirmed, 3D CAD + supported ERP confirmed, 5–50 engineers, $10M–$250M revenue, ETO or CTO model |
+| 3 | Meets 4 of 5 criteria above; one gap (size slightly off, or mfg model inferred not confirmed) |
+| 2 | Meets 3 of 5 criteria; CAD + ERP confirmed but size or model unclear |
+| 1 | Meets 1–2 criteria; likely fit but significant unknowns |
+| 0 | Fails ICP triage or disqualifying signal present |
+
+### Dimension 2: Pain Indicators (0–4)
+
+| Score | Criteria |
+|-------|----------|
+| 4 | Explicit pain confirmed — job post mentions "data entry" or "BOM entry" in engineering role; or press/review mentions BOM errors; or direct statement |
+| 3 | Strong implicit pain — ETO/CTO shop with 10+ engineers, no visible integration tool anywhere |
+| 2 | Moderate — CAD + ERP present, moderate engineer count, standard manufacturing model |
+| 1 | Weak signals — small team (<5 engineers) or simple product structure |
+| 0 | No pain signals, or existing working automation detected |
+
+### Dimension 3: Research Depth (0–4)
+
+| Score | Criteria |
+|-------|----------|
+| 4 | CAD confirmed, ERP confirmed, engineer count estimated, manufacturing model identified (ETO/CTO/MTO), and at least one trigger event found |
+| 3 | CAD confirmed, ERP confirmed, engineer count estimated; manufacturing model inferred but not confirmed |
+| 2 | CAD + ERP confirmed; size and model not determinable from available data |
+| 1 | One of CAD or ERP confirmed; the other is unknown |
+| 0 | Minimal public data available; can't confirm CAD or ERP |
+
+### Dimension 4: CRM Readiness (0–4)
+
+| Score | Criteria |
+|-------|----------|
+| 4 | Named decision maker found (VP/Dir Engineering or IT Director) with LinkedIn URL and at least one personalization anchor |
+| 3 | Title-level contact found on LinkedIn; no direct personalization anchor but reachable |
+| 2 | Company found on LinkedIn; engineer or IT roles visible but no named individual |
+| 1 | Company only; no individual contact data at all |
+| 0 | No usable contact data |
+
+### Dimension 5: Call Prep Quality (0–4)
+
+| Score | Criteria |
+|-------|----------|
+| 4 | Trigger event identified, pain quantified or estimated, MEDDPICC hypotheses built (M + I), competitive landscape assessed, stat hook ready |
+| 3 | Most prep complete; trigger identified; pain estimated; minor gaps in MEDDPICC |
+| 2 | Basic pain hypothesis + pricing estimate only; no trigger, no competitive intel |
+| 1 | Minimal prep; only company name and product type confirmed |
+| 0 | Not ready for a call |
+
+### WGLL Rating
+
+| Score | Rating | Action |
+|-------|--------|--------|
+| 16–20 | **Advance** | Schedule discovery immediately. High-confidence ICP fit. |
+| 12–15 | **Qualify** | Good prospect. Begin outreach sequence. |
+| 8–11 | **Nurture** | Soft ICP fit or insufficient data. Monitor for triggers. |
+| 0–7 | **Disqualify** | No fit or data gap too large. |
+
+---
+
+## Step 5: BANT Binary Gate (New ERP/PLM routing only)
+
+If pipeline = New ERP/PLM, run this gate. All 4 must pass to advance the deal.
+
+| Element | Pass | Fail |
+|---------|------|------|
+| **Budget** | Integration is part of the ERP project budget; ERP project has active funding | "Phase 2" or no mention of integration budget |
+| **Authority** | Named customer decision-maker who controls integration decisions can be identified | Can't name anyone; partner-only contact |
+| **Need** | Customer has confirmed requirement or strong preference for CAD-ERP integration at go-live | "Nice to have" or "maybe later" |
+| **Timeline** | ERP selection within 12 months or active evaluation in progress | >12 months out; no ERP timeline visible |
+
+**BANT result:**
+- All 4 pass: `bant_binary_pass: true` — route to New ERP/PLM, advance
+- Any fail: `bant_binary_pass: false` — flag which elements failed; default to Aftermarket or hold
+
+---
+
+## Step 6: Pain Hypotheses (MEDDPICC — M and I)
+
+Build pre-Discovery hypotheses from what you found. These are starting points for the AE, not confirmed facts.
+
+**M — Metrics (How will they measure success?)**
+Write one sentence: "[Estimated engineer count] engineers × [estimated BOM entry hours/week] hrs/week × $60/hr = $[amount]/year in labor savings from eliminating manual entry."
+
+If engineer count unknown: use "20 engineers" as the default for a company in CADTALK's ICP range.
+
+**I — Identification of Goal (Why now?)**
+State the trigger: "They're implementing [ERP] and need integration at go-live." / "Their CAD-to-ERP scripts will break during the cloud migration." / "Engineer count doubled; manual entry is no longer sustainable." / "No visible trigger — pain is likely chronic but not acute."
+
+---
+
+## Step 7: Pricing Estimate
+
+### Product Line
+
+| Situation | Product Line |
+|-----------|-------------|
+| 3D CAD connecting to ERP | Standard CAD/PDM/PLM → ERP |
+| MCAD connecting to Arena PLM | MCAD → Arena PLM |
+| Arena PLM connecting to ERP | Arena PLM → ERP |
+
+### Tier
+
+| Tier | Use When |
+|------|----------|
+| Tier 1 | Single CAD source, standard items/BOM only, no routings, no rules, no DFM |
+| Tier 2 | Needs rules engine, routings, costing, DFM access, or ECO support |
+| Tier 3 | Multi-site, batch/unattended automation, WBS/Projects |
+
+**Default to Tier 2** when manufacturing model is ETO or CTO and company has 10+ engineers. Default to Tier 1 for MTO or small shops (<10 engineers).
+
+### Price Matrix (subscription/year)
+
+| | Tier 1 | Tier 2 | Tier 3 |
+|--|--------|--------|--------|
+| SMB (Acumatica, BC, NetSuite, MYOB) | $10,995 | $16,995 | $24,995 |
+| Mid-Market (Infor, Epicor, SYSPRO) | $14,995 | $21,995 | $32,995 |
+| Enterprise (IFS, SAP, F&O, JDE, QAD) | $19,995 | $29,995 | $44,995 |
+
+Implementation: $6,995–$14,995 (one-time). Startup grant (revenue <$5M): 50% off implementation only.
+
+**Year 1 total** = subscription + implementation midpoint.
+
+---
+
+## Step 8: Pipedrive Record Creation
+
+Create all three records automatically. No confirmation prompt.
+
+### 8.1 Search for Existing Org
+
+Search Pipedrive for the company name. If found, use the existing org ID. If not found, create:
+
+**Organization:**
+- Name: [company name]
+- Set Organization Type field if visible (Manufacturer)
+
+### 8.2 Create Person (if contact found)
+
+Only if a named contact was found in research:
+- Name: [contact name]
+- Title: [title]
+- LinkedIn: [URL if found]
+- Link to org
+
+If no named contact found: skip Person creation. Note it in the qualification file.
+
+### 8.3 Create Deal
+
+**Deal name format:** `[Company]-CADTalk ERP-[CAD System]-[ERP Name]`
+
+Examples:
+- `Acme Industries-CADTalk ERP-SolidWorks-IFS`
+- `Midland Fabricators-CADTalk ERP-Inventor-Acumatica`
+- `Precision Dynamics-CADTalk ERP-Creo-NetSuite`
+
+**Deal fields to set:**
+| Field | Value |
+|-------|-------|
+| Pipeline | New ERP/PLM or Aftermarket (per Step 3 routing) |
+| Stage | First stage of selected pipeline |
+| Expected close | Leave blank (AE sets after discovery) |
+| Source System | [CAD system name] |
+| Target System | [ERP name] |
+| Org Source | Web Research — AI Agent |
+| Source Channel | Outbound |
+| Lead Status | New |
+
+### 8.4 Pin WGLL Score Note
+
+Create a note on the deal. Mark it as pinned.
+
+**Note title:** `WGLL SCORE: [Rating] – [Date] – AI Agent – [X]/20 – [Pipeline]`
+
+**Note body:**
+```
+WGLL SCORE: [Advance|Qualify|Nurture|DQ] — [YYYY-MM-DD] — AI Agent — [X]/20 — [Pipeline]
+
+ICP Fit:         [X]/4
+Pain Indicators: [X]/4
+Research Depth:  [X]/4
+CRM Readiness:   [X]/4
+Call Prep:       [X]/4
+
+Pain Hypothesis: [one sentence from Step 6 — M]
+Trigger:         [one sentence from Step 6 — I]
+Pipeline:        [Aftermarket|New ERP/PLM]
+Price Estimate:  $[subscription]/yr + $[implementation] impl | Y1 Total: ~$[y1_total]
+```
+
+### 8.5 Create Activity
+
+Create a Pipedrive activity linked to the deal:
+- Type: Task
+- Subject: "Review AI qualification — [Company Name]"
+- Note: "WGLL [X]/20 — [Rating]. AI agent completed full qualification. Review before outreach."
+- Due: Tomorrow
+- Assigned to: Jeff Brickler
+
+---
+
+## Step 9: Save to Deal Desk
+
+Save the full qualification report to:
+
+`C:\Users\JeffBrickler\OneDrive - Solutionsx, LLC\ClaudeCoWork\Deal Desk\deals\[CompanyName]\LEAD-QUALIFICATION.md`
+
+Create the folder if it doesn't exist.
+
+---
+
+## Output File: LEAD-QUALIFICATION.md
 
 ```markdown
 # Lead Qualification: [Company Name]
-**URL:** [url]
-**Date:** [current date]
-**Opportunity Quality Score: [X]/100**
-**Lead Grade: [A/B/C/D] — [Label]**
-**BANT Score: [X]/100 | MEDDIC Completeness: [X]%**
+
+**Date:** [YYYY-MM-DD]
+**URL:** [company URL]
+**Pipeline:** [Aftermarket | New ERP/PLM | Expansion | Disqualified]
+**WGLL Score:** [X]/20 — [Advance | Qualify | Nurture | DQ]
 
 ---
 
 ## Qualification Snapshot
 
-| Metric | Value |
-|--------|-------|
-| **Company** | [name] |
-| **Industry** | [vertical] |
-| **Employees** | [count] |
-| **BANT Score** | [X]/100 |
-| **MEDDIC Completeness** | [X]% |
-| **Opportunity Quality Score** | [X]/100 |
-| **Lead Grade** | [letter] — [label] |
-| **Urgency Level** | [High/Medium/Low/None] |
-| **Recommended Action** | [one-line recommendation] |
+| Field | Value |
+|-------|-------|
+| Company | [name] |
+| CAD System | [system] |
+| ERP System | [ERP] |
+| ERP Class | [SMB / Mid-Market / Enterprise] |
+| Manufacturing Model | [ETO / CTO / MTO / Unknown] |
+| Employee Count | [estimate] |
+| Engineer Count | [estimate] |
+| Revenue Estimate | [range] |
+| Pipeline | [pipeline] |
+| WGLL Score | [X]/20 — [Rating] |
+| ICP Triage | [Pass / Fail — reason if fail] |
 
 ---
 
-## BANT Scorecard
+## WGLL Scorecard
 
-| Dimension | Score | Key Evidence | Confidence |
-|-----------|-------|-------------|------------|
-| **Budget** | [X]/25 | [most compelling evidence] | [High/Medium/Low/Inferred] |
-| **Authority** | [X]/25 | [most compelling evidence] | [High/Medium/Low/Inferred] |
-| **Need** | [X]/25 | [most compelling evidence] | [High/Medium/Low/Inferred] |
-| **Timeline** | [X]/25 | [most compelling evidence] | [High/Medium/Low/Inferred] |
-| **TOTAL** | **[X]/100** | | |
-
-### Budget Analysis
-[Detailed findings for Budget dimension. All signals detected with evidence and sources.
-Include funding history, tech spend indicators, pricing signals, and budget proxies.]
-
-### Authority Analysis
-[Detailed findings for Authority dimension. Identified decision makers with titles.
-Org structure assessment. Buying process estimation.]
-
-### Need Analysis
-[Detailed findings for Need dimension. Specific pain points detected with evidence.
-Problem awareness level. Current solution satisfaction.]
-
-### Timeline Analysis
-[Detailed findings for Timeline dimension. Trigger events, urgency signals,
-buying cycle estimation, seasonal factors.]
+| Dimension | Score | Evidence |
+|-----------|-------|----------|
+| ICP Fit | [X]/4 | [key evidence] |
+| Pain Indicators | [X]/4 | [key evidence] |
+| Research Depth | [X]/4 | [key evidence] |
+| CRM Readiness | [X]/4 | [key evidence] |
+| Call Prep Quality | [X]/4 | [key evidence] |
+| **Total** | **[X]/20** | **[Advance / Qualify / Nurture / DQ]** |
 
 ---
 
-## MEDDIC Assessment
+## Pipeline Routing
 
-| Element | Finding | Evidence | Confidence |
-|---------|---------|----------|------------|
-| **Metrics** | [what they measure] | [source] | [level] |
-| **Economic Buyer** | [name, title] | [source] | [level] |
-| **Decision Criteria** | [key criteria] | [source] | [level] |
-| **Decision Process** | [how they buy] | [source] | [level] |
-| **Identify Pain** | [specific pain] | [source] | [level] |
-| **Champion** | [potential champion] | [source] | [level] |
+**Routed to:** [Pipeline name]
+**Reason:** [One sentence explaining the routing decision]
 
-### Metrics Deep Dive
-[Full analysis of what metrics matter to this prospect]
-
-### Economic Buyer Profile
-[Detailed profile of the identified economic buyer]
-
-### Decision Criteria Assessment
-[Full analysis of evaluation criteria]
-
-### Decision Process Map
-[Estimated buying process with stages and stakeholders]
-
-### Pain Point Analysis
-[All identified pain points with severity and evidence]
-
-### Champion Strategy
-[Potential champions and engagement approach]
+[If New ERP/PLM:]
+### BANT Binary Gate
+| Element | Result | Evidence |
+|---------|--------|----------|
+| Budget | Pass / Fail / Unknown | [evidence] |
+| Authority | Pass / Fail / Unknown | [evidence] |
+| Need | Pass / Fail / Unknown | [evidence] |
+| Timeline | Pass / Fail / Unknown | [evidence] |
+**Gate result:** [Pass / Fail — note which elements failed]
 
 ---
 
-## Buying Signals Detected
+## Pain Hypotheses
 
-1. **[Signal]** — [Evidence] (Source: [source], Strength: [Strong/Moderate/Weak])
-2. **[Signal]** — [Evidence] (Source: [source], Strength: [Strong/Moderate/Weak])
-3. **[Signal]** — [Evidence] (Source: [source], Strength: [Strong/Moderate/Weak])
-[Continue for all signals]
+**M — Metrics:**
+[Labor calc: X engineers × Y hrs/week × $60/hr × 50 weeks = $Z/year]
 
-## Red Flags
-
-1. **[Flag]** — [Evidence] (Source: [source], Severity: [High/Medium/Low])
-   *Mitigation:* [how to address]
-2. **[Flag]** — [Evidence] (Source: [source], Severity: [High/Medium/Low])
-   *Mitigation:* [how to address]
-[Continue for all flags]
+**I — Identification of Goal:**
+[Trigger statement — why now]
 
 ---
 
-## Opportunity Quality Score: [X]/100
+## Competitive Position
 
-| Component | Score | Weight | Weighted |
-|-----------|-------|--------|----------|
-| BANT Score | [X]/100 | 50% | [X] |
-| MEDDIC Completeness | [X]/100 | 30% | [X] |
-| Urgency Modifier | [X]/100 | 20% | [X] |
-| **TOTAL** | | **100%** | **[X]/100** |
+**Incumbent:** [Manual | DIY Scripts | SharpSync | QBuild | Arena | Unknown]
+**Displacement angle:** [one sentence]
+**Risk flags:** [QBuild/partner risk if applicable]
 
 ---
 
-## Recommended Approach
+## Pricing Estimate
 
-**Lead Grade:** [letter] — [label]
+| | Value |
+|--|-------|
+| Product Line | [Standard CAD→ERP / MCAD→Arena / Arena→ERP] |
+| Tier | [Tier 1 / 2 / 3] |
+| Subscription/Year | $[amount] |
+| Implementation | $[range] |
+| Year 1 Total | ~$[amount] |
+| Startup Grant Eligible | [Yes / No] |
 
-**Strategy:** [2-3 paragraph recommendation on how to approach this prospect.
-Include specific messaging angles, stakeholders to target,
-timeline expectations, and deal size estimate.]
+---
+
+## Contacts Found
+
+| Name | Title | Role | LinkedIn | Anchor |
+|------|-------|------|----------|--------|
+| [name or "Not found"] | [title] | [persona] | [URL] | [anchor] |
+
+---
+
+## Pipedrive
+
+| Record | Status |
+|--------|--------|
+| Organization | [Created / Found existing — ID: X] |
+| Person | [Created / Skipped — no contact found] |
+| Deal | [Created — Name: X, Pipeline: Y, Stage: Z] |
+| WGLL Note | [Pinned to deal] |
+| Activity | [Created — due: tomorrow] |
+
+---
 
 ## Next Steps
 
-1. [Most important next action with specifics]
-2. [Second priority action]
-3. [Third priority action]
-4. [Fourth priority action]
-5. [Fifth priority action]
+1. [AE action — outreach to primary contact or partner AE]
+2. [Discovery prep — key questions based on pain hypothesis]
+3. [If New ERP: confirm partner AE and get on MAP]
+4. [Watch for: specific trigger or signal that increases urgency]
 
 ---
 
-*Generated by AI Sales Team — `/sales qualify`*
+*Generated by AI Agent — /sales qualify — [date]*
 ```
 
 ---
 
-## Terminal Output
+## Terminal Display
 
-Display a condensed summary in the terminal:
+After completing all steps, display in the terminal:
 
 ```
-=== LEAD QUALIFICATION COMPLETE ===
+=== CADTALK LEAD QUALIFICATION ===
 
-Company:  [name]
-Industry: [vertical]
+Company:    [name]
+URL:        [url]
+Date:       [YYYY-MM-DD]
 
-BANT Score: [X]/100
-  Budget:    [XX]/25 ████████░░
-  Authority: [XX]/25 ██████░░░░
-  Need:      [XX]/25 ███████░░░
-  Timeline:  [XX]/25 █████░░░░░
+ICP Triage: [PASS | FAIL — reason]
 
-MEDDIC Completeness: [X]%
-  Metrics:          [Found/Partial/Missing]
-  Economic Buyer:   [Found/Partial/Missing]
-  Decision Criteria:[Found/Partial/Missing]
-  Decision Process: [Found/Partial/Missing]
-  Identify Pain:    [Found/Partial/Missing]
-  Champion:         [Found/Partial/Missing]
+CAD System: [system]
+ERP System: [ERP] ([SMB|Mid-Market|Enterprise])
+Mfg Model:  [ETO|CTO|MTO|Unknown]
+Engineers:  [estimate]
 
-Opportunity Quality Score: [X]/100
-Lead Grade: [letter] — [label]
+WGLL Score: [X]/20 — [ADVANCE | QUALIFY | NURTURE | DQ]
+  ICP Fit:         [X]/4
+  Pain Indicators: [X]/4
+  Research Depth:  [X]/4
+  CRM Readiness:   [X]/4
+  Call Prep:       [X]/4
 
-Top Buying Signals:
-  1. [signal]
-  2. [signal]
-  3. [signal]
+Pipeline:   [Aftermarket | New ERP/PLM | Expansion]
+[If New ERP:] BANT Gate: [PASS | FAIL — elements that failed]
 
-Red Flags:
-  1. [flag]
-  2. [flag]
+Pain:       [one-line M hypothesis]
+Trigger:    [one-line I hypothesis]
 
-Recommended Action: [one-line recommendation]
+Pricing:    $[subscription]/yr | Y1: ~$[total]
+Incumbent:  [category]
 
-Full report saved to: LEAD-QUALIFICATION.md
+Pipedrive:
+  Org:      [Created | Found]
+  Person:   [Created | Skipped]
+  Deal:     [Deal name]
+  Pipeline: [pipeline name]
+  Note:     WGLL pinned
+
+Report:     [full file path]
+===================================
 ```
 
 ---
 
 ## Error Handling
 
-- If the URL is unreachable, attempt alternate formats then report the error
-- If job postings are not publicly accessible, note the gap and use alternative signals
-- If the company has minimal public presence, reduce confidence levels across the board and note data limitations
-- Always produce a qualification report with whatever data is available — even incomplete data is valuable for prioritization
-- If BANT score is below 25 and confidence is Low/Inferred across all dimensions, recommend manual research before any outreach
-
-## Cross-Skill Integration
-
-- If `COMPANY-RESEARCH.md` exists, use it to pre-populate company data and skip redundant research
-- If `DECISION-MAKERS.md` exists, use it for Authority and Champion analysis
-- If `COMPETITIVE-INTEL.md` exists, use it for current solution and switching cost analysis
-- Suggest follow-up: `/sales contacts` for decision maker deep dive, `/sales outreach` for engagement sequence
+- URL unreachable: try alternate URL formats (www, no-www, /about, /company); note failure and proceed with search-only data
+- Pipedrive org already exists: use existing; do not duplicate
+- Pipedrive deal already exists for this company: flag in output; do not duplicate; update WGLL note instead
+- Company has no LinkedIn presence: note the gap; score Research Depth at 1 maximum
+- No contacts found: skip Person creation; set CRM Readiness to 2 or below; note in output
+- Deal Desk folder doesn't exist: create it before saving the file

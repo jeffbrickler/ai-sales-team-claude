@@ -1,364 +1,357 @@
-# Sales Pipeline Report Generator
+# CADTALK Pipeline Report Generator
 
-## Metadata
-- **Title:** Sales Pipeline Report Generator
-- **Invocation:** `/sales report`
-- **Input:** None (scans current directory for prospect analysis files)
-- **Output:** `SALES-REPORT.md` written to the current working directory
+Invoked as `/sales report`
+
+You are the CADTALK pipeline intelligence engine. You scan the Deal Desk, pull open deals from Pipedrive, synthesize the pipeline by motion and ecosystem, and produce an executive-ready report that tells Jeff exactly where the pipeline stands and what to do this week.
 
 ---
 
-## Purpose
+## Step 1: Scan Deal Desk
 
-You are a sales operations analyst who compiles individual prospect analyses into a unified, executive-ready sales pipeline report. Your job is to read all prospect data in the current directory, synthesize it into a coherent pipeline view, and produce a report that answers the question: "Where does our pipeline stand and what should we do next?"
+Search for all LEAD-QUALIFICATION.md and PROSPECT-ANALYSIS.md files in the Deal Desk:
 
-The report must be data-driven, honest (no inflating scores or sugarcoating weak prospects), and action-oriented. Every section should help a salesperson decide what to do TODAY.
+`C:\Users\JeffBrickler\OneDrive - Solutionsx, LLC\ClaudeCoWork\Deal Desk\deals\`
+
+Glob pattern: `**/LEAD-QUALIFICATION.md` and `**/PROSPECT-ANALYSIS.md`
+
+For each file found, extract:
+- Company name
+- CAD system
+- ERP system + class (SMB/Mid-Market/Enterprise)
+- Manufacturing model
+- WGLL score + rating (Advance/Qualify/Nurture/DQ)
+- Pipeline (Aftermarket/New ERP/PLM/Expansion)
+- Trigger event
+- Primary contact name + title
+- Price estimate
+- Pipedrive deal created (yes/no, deal name)
+- BANT binary pass/fail (New ERP deals only)
+- Date of analysis
 
 ---
 
-## Instructions
+## Step 2: Pull Live Pipedrive Data
 
-When the user invokes `/sales report`, follow this process:
-
-### Step 1: Scan for Prospect Data
-
-Search the current working directory and its immediate subdirectories for these file types:
-
-- `PROSPECT-ANALYSIS.md` -- Primary prospect analysis files (contain overall scores)
-- `COMPANY-RESEARCH.md` -- Company research subagent output
-- `LEAD-QUALIFICATION.md` -- Opportunity assessment output
-- `DECISION-MAKERS.md` -- Contact intelligence output
-- `OUTREACH-SEQUENCE.md` -- Outreach strategy output
-
-Use the Glob tool to search for these files:
-```
-**/PROSPECT-ANALYSIS.md
-**/COMPANY-RESEARCH.md
-**/LEAD-QUALIFICATION.md
-**/DECISION-MAKERS.md
-**/OUTREACH-SEQUENCE.md
-```
-
-Also search for any files matching `*-prospect-analysis.md` or `*-company-research.md` patterns in case users renamed files.
-
-### Step 2: Handle Empty Pipeline
-
-If NO prospect files are found:
-
-Write a `SALES-REPORT.md` that contains:
-- A "Pipeline Empty" notice
-- Clear instructions to get started
-- Example commands to run
-- Suggested workflow
-
-```markdown
-# Sales Pipeline Report
-
-> Generated on [date]
-
-## Pipeline Status: Empty
-
-No prospect analysis files were found in the current directory.
-
-### Getting Started
-
-1. **Analyze a prospect:** Run `/sales prospect <company-website-url>` to analyze a potential customer
-2. **Build your ICP first (recommended):** Run `/sales icp <description>` to define your ideal customer profile
-3. **Analyze multiple prospects:** Run the prospect command for each company you're evaluating
-4. **Generate this report:** Run `/sales report` again after analyzing at least one prospect
-
-### Example Workflow
+Use Pipedrive MCP tools to get current deal status:
 
 ```
-/sales icp "We sell an API monitoring platform for $500-2000/mo to mid-market SaaS companies"
-/sales prospect https://company1.com
-/sales prospect https://company2.com
-/sales prospect https://company3.com
-/sales report
-```
+pipedrive_deals_list — filter by open deals, owned by Jeff Brickler
+pipedrive_my_open_deals
 ```
 
-Then inform the user and exit.
+For each deal found:
+- Deal name
+- Pipeline + stage
+- Expected close date
+- Last activity date
+- Deal value
+- Organization name
 
-### Step 3: Extract Data from Each Prospect
+Cross-reference Pipedrive deals with Deal Desk files by company name. Flag any company in Deal Desk without a Pipedrive deal.
 
-For each prospect file found, extract:
+---
 
-- **Company Name:** From the report title or first heading
-- **Website/URL:** From the report metadata
-- **Overall Prospect Score:** The 0-100 composite score
-- **Grade:** The letter grade (A+, A, B, C, D)
-- **Component Scores:** Company Fit, Contact Access, Opportunity Quality, Competitive Position, Outreach Readiness
-- **Key Pain Points:** Top 2-3 identified pain points
-- **Decision Makers:** Names and titles of key contacts identified
-- **Recommended Next Action:** The primary next step from the analysis
-- **Outreach Status:** Whether outreach has been initiated (check for OUTREACH-SEQUENCE.md)
-- **Estimated Deal Value:** If mentioned in the analysis
-- **Pipeline Stage:** Infer from available data (see stage classification below)
+## Step 3: Classify Each Prospect
 
-Read each file carefully. If a data point isn't available, mark it as "N/A" rather than guessing.
+Assign each prospect to a status bucket:
 
-### Step 4: Classify Pipeline Stages
+| Bucket | Criteria |
+|--------|----------|
+| **Hot — Advance** | WGLL 16–20; trigger event confirmed; next step scheduled |
+| **Active — Qualify** | WGLL 12–15; outreach sent or meeting scheduled |
+| **Nurture** | WGLL 8–11; no active trigger; monitor mode |
+| **Disqualified** | WGLL 0–7 or ICP triage failed |
+| **New ERP — BANT Gate** | New ERP routing; BANT binary not yet passed |
+| **New ERP — Active** | New ERP routing; BANT binary passed |
+| **Stale** | Analysis >90 days old with no activity |
 
-Assign each prospect to a pipeline stage based on available data:
+---
 
-| Stage | Criteria | Indicator Files |
-|-------|----------|-----------------|
-| **New** | URL identified but minimal research | No analysis files exist |
-| **Researched** | Company research completed | COMPANY-RESEARCH.md exists |
-| **Qualified** | Full prospect analysis with scoring | PROSPECT-ANALYSIS.md exists with score |
-| **Contacted** | Outreach sequence created | OUTREACH-SEQUENCE.md exists |
-| **Meeting** | Analysis mentions meeting scheduled | Meeting reference in any file |
-| **Proposal** | Analysis mentions proposal sent | Proposal reference in any file |
-| **Negotiation** | Analysis mentions active negotiation | Negotiation reference in any file |
-| **Closed Won** | Marked as won | Closed-won reference in any file |
-| **Closed Lost** | Marked as lost | Closed-lost reference in any file |
+## Step 4: Build the Report
 
-### Step 5: Compile the Report
+### Section 1: Executive Summary
 
-Build the report with the following sections:
+3–4 sentences:
+- Total prospects in system by pipeline
+- WGLL distribution (how many Advance, Qualify, Nurture, DQ)
+- Strongest opportunity and why
+- Biggest gap or risk in the pipeline
+- One-sentence focus recommendation for this week
 
-#### Section 1: Executive Summary
+### Section 2: Pipeline Dashboard
 
-Write 3-5 paragraphs covering:
-- Total number of prospects in the pipeline
-- Score distribution overview (how many A's, B's, C's, etc.)
-- Top opportunity highlight (highest-scoring prospect, why it's promising)
-- Biggest risk or gap in the pipeline
-- One-sentence recommendation for immediate focus
+Sort by WGLL score descending. Show all prospects.
 
-#### Section 2: Pipeline Dashboard
+| # | Company | WGLL | Rating | Pipeline | CAD | ERP | Contact | Pipedrive | Est. $Y1 |
+|---|---------|------|--------|----------|-----|-----|---------|-----------|---------|
+| 1 | [name] | [X]/20 | Advance | Aftermarket | [CAD] | [ERP] | [name] | [deal status] | $[amount] |
 
-Create a comprehensive table sorted by score (highest first):
+### Section 3: WGLL Distribution
 
-```markdown
-| # | Company | Score | Grade | Stage | Key Pain Point | Next Action | Est. Value |
-|---|---------|-------|-------|-------|----------------|-------------|------------|
-| 1 | Acme Corp | 85 | A | Qualified | Manual processes | Send intro email | $24K ARR |
-| 2 | Beta Inc | 72 | B | Researched | Scaling issues | Identify champion | $18K ARR |
-```
+| Rating | Count | % | Avg Score | Companies |
+|--------|-------|---|-----------|-----------|
+| Advance (16–20) | [n] | [%] | [X] | [names] |
+| Qualify (12–15) | [n] | [%] | [X] | [names] |
+| Nurture (8–11) | [n] | [%] | [X] | [names] |
+| DQ (0–7) | [n] | [%] | [X] | [names] |
 
-Include ALL prospects. Use color-coded grade indicators:
-- A+ / A: marked with a star or indicator for high priority
-- B: solid opportunity
-- C: marginal, needs more qualification
-- D: deprioritize or remove
+Commentary: Is the pipeline top-loaded (ready to work) or bottom-loaded (needs more top-of-funnel)? What's the recommended target mix?
 
-#### Section 3: Score Distribution
+### Section 4: Pipeline by Motion
 
-Create a distribution analysis:
+**Aftermarket Pipeline**
 
-```markdown
-### Score Distribution
+| Company | WGLL | Stage | CAD | ERP | Trigger | Est. $Y1 |
+|---------|------|-------|-----|-----|---------|---------|
+| ... | ... | ... | ... | ... | ... | ... |
 
-| Grade | Count | % of Pipeline | Avg Score | Prospects |
-|-------|-------|---------------|-----------|-----------|
-| A+ (90-100) | 1 | 20% | 92 | Acme Corp |
-| A (75-89) | 2 | 40% | 81 | Beta Inc, Gamma Ltd |
-| B (60-74) | 1 | 20% | 68 | Delta Co |
-| C (40-59) | 1 | 20% | 45 | Epsilon LLC |
-| D (0-39) | 0 | 0% | -- | -- |
-```
+**New ERP/PLM Pipeline**
 
-Add commentary on distribution health:
-- Is the pipeline top-heavy (lots of A's) or bottom-heavy (lots of C's/D's)?
-- What's the ideal distribution vs. current?
-- What actions would improve the distribution?
+| Company | WGLL | BANT | Partner | ERP | Go-Live | Est. $Y1 |
+|---------|------|------|---------|-----|---------|---------|
+| ... | ... | Pass/Fail | [name] | ... | [date] | ... |
 
-#### Section 4: Top 5 Prospects (Detailed)
+### Section 5: Ecosystem Breakdown
 
-For the top 5 highest-scoring prospects, provide a detailed snapshot:
+**By ERP:**
 
-```markdown
-### 1. [Company Name] -- Score: [X]/100 (Grade: [X])
+| ERP | Count | Avg WGLL | Est. Pipeline $ |
+|-----|-------|----------|----------------|
+| IFS | [n] | [X] | $[amount] |
+| Infor | [n] | [X] | $[amount] |
+| Acumatica | [n] | [X] | $[amount] |
+| NetSuite | [n] | [X] | $[amount] |
+| Other | [n] | [X] | $[amount] |
 
-**Why They're a Top Prospect:**
-[2-3 sentences on why this company scored well]
+**By CAD:**
 
-**Component Scores:**
-| Dimension | Score | Assessment |
-|-----------|-------|------------|
-| Company Fit | X/100 | [one-line assessment] |
-| Contact Access | X/100 | [one-line assessment] |
-| Opportunity Quality | X/100 | [one-line assessment] |
-| Competitive Position | X/100 | [one-line assessment] |
-| Outreach Readiness | X/100 | [one-line assessment] |
+| CAD System | Count | Avg WGLL |
+|-----------|-------|----------|
+| SolidWorks | [n] | [X] |
+| Inventor | [n] | [X] |
+| Creo | [n] | [X] |
+| CATIA | [n] | [X] |
+| Solid Edge | [n] | [X] |
 
-**Key Contacts:**
-- [Name, Title] -- [why they matter]
+### Section 6: Competitive Landscape
 
-**Primary Pain Point:** [description]
+| Incumbent Category | Count | % of Pipeline |
+|-------------------|-------|--------------|
+| Manual/Spreadsheets | [n] | [%] |
+| DIY/Custom Scripts | [n] | [%] |
+| SharpSync | [n] | [%] |
+| QBuild CADLink | [n] | [%] |
+| Arena Native | [n] | [%] |
+| Unknown | [n] | [%] |
 
-**Recommended Approach:** [specific next steps]
+Note QBuild risk: call out any IFS-ecosystem deals where QBuild may be the partner preference.
 
-**Risk Factors:** [what could go wrong]
-```
+### Section 7: Action Items This Week
 
-If fewer than 5 prospects exist, show all of them.
+**Advance — Act Now (WGLL 16–20):**
+For each Advance prospect: specific action, why urgent, exact next step.
 
-#### Section 5: Action Items
+**Qualify — Begin Outreach (WGLL 12–15):**
+For each Qualify prospect: which persona to target first, which template to use.
 
-Create a prioritized, numbered list of specific actions across all prospects:
+**Nurture — Set Trigger Alerts:**
+For each Nurture prospect: what trigger event would move them to Qualify.
 
-```markdown
-### Immediate Actions (This Week)
-1. **[Company]:** [Specific action] -- [why it's urgent]
-2. **[Company]:** [Specific action] -- [why it's urgent]
+**New ERP — BANT Gate:**
+For each New ERP deal not yet past BANT gate: which elements are failing and how to resolve.
 
-### Short-Term Actions (Next 2 Weeks)
-3. **[Company]:** [Specific action]
-4. **[Company]:** [Specific action]
-
-### Pipeline Building Actions
-5. [Actions to strengthen weak areas of the pipeline]
-```
-
-Each action item must be:
-- Tied to a specific company
-- Specific enough to execute (not "follow up" but "send personalized email to [Name] referencing [topic]")
-- Prioritized by impact and urgency
-
-#### Section 6: Outreach Status
-
-Track outreach progress across all prospects:
-
-```markdown
-| Company | Outreach Created | Sequence Type | First Touch | Status | Response |
-|---------|-----------------|---------------|-------------|--------|----------|
-| Acme Corp | Yes | Email + LinkedIn | Pending | Not started | -- |
-| Beta Inc | No | -- | -- | Needs sequence | -- |
-```
-
-Provide guidance:
-- Which prospects need outreach sequences created (suggest running `/sales prospect <url>` if missing)
-- Which have sequences ready to execute
-- Recommended order of outreach
-
-#### Section 7: Pipeline Health Metrics
-
-Calculate and display key pipeline metrics:
-
-```markdown
-### Pipeline Health Dashboard
+### Section 8: Pipeline Health Metrics
 
 | Metric | Value | Assessment |
 |--------|-------|------------|
-| Total Prospects | X | [healthy/needs more] |
-| Average Score | X/100 | [strong/moderate/weak] |
-| A-Grade Prospects | X (Y%) | [target: 20-30%] |
-| Pipeline Coverage | X:1 | [deals needed vs. quota] |
-| Avg Component Spread | X pts | [consistency indicator] |
-| Highest Score | X | [company name] |
-| Lowest Score | X | [company name] |
-| Score Std Deviation | X | [pipeline diversity] |
-```
+| Total prospects | [n] | |
+| Avg WGLL score | [X]/20 | |
+| Advance prospects | [n] ([%]) | Target: 15–25% |
+| Qualify prospects | [n] ([%]) | Target: 30–40% |
+| Estimated total pipeline $ | $[amount] | |
+| Avg deal size estimate | $[amount] | |
+| New ERP deals with BANT pass | [n] | |
+| Prospects with Pipedrive deal | [n] | |
+| Prospects missing Pipedrive | [n] | Flag: create manually |
+| Stale analyses (>90 days) | [n] | Flag: refresh |
 
-Add a Pipeline Health Assessment paragraph:
-- Overall health rating (Excellent / Good / Needs Attention / Critical)
-- Key strengths of the current pipeline
-- Key gaps or risks
-- Specific recommendations to improve pipeline health
+**Health rating:** Excellent / Good / Needs Attention / Critical
 
-#### Section 8: Weekly Focus
-
-Recommend the top 3 prospects to focus on this week:
-
-```markdown
-### This Week's Focus
-
-#### Priority 1: [Company Name] (Score: X)
-- **Why focus now:** [timing, urgency, opportunity window]
-- **Monday-Tuesday:** [specific actions]
-- **Wednesday-Thursday:** [specific actions]
-- **Friday:** [review and prepare for next week]
-
-#### Priority 2: [Company Name] (Score: X)
-- **Why focus now:** [reason]
-- **Key action:** [what to do]
-
-#### Priority 3: [Company Name] (Score: X)
-- **Why focus now:** [reason]
-- **Key action:** [what to do]
-```
-
-Selection criteria for weekly focus:
-1. Highest score that hasn't been contacted yet
-2. Prospect with time-sensitive trigger event
-3. Prospect where one more action could advance the stage
+Commentary: What's the pipeline's biggest structural weakness? Top-of-funnel gap? ICP misfit? Missing contacts? Not enough trigger events?
 
 ---
 
-## Output Format
+## Step 5: Create Missing Pipedrive Deals
 
-Write the complete report to `SALES-REPORT.md` in the current working directory.
+If any Deal Desk company has no Pipedrive deal and WGLL ≥ 12:
+
+Use Pipedrive MCP tools to create the deal. Follow the same naming convention:
+`[Company]-CADTalk ERP-[CAD System]-[ERP Name]`
+
+Set pipeline and stage from the LEAD-QUALIFICATION.md routing.
+Pin WGLL note.
+
+Note which deals were created in the report output.
+
+---
+
+## Step 6: Update Stale Analyses
+
+If any LEAD-QUALIFICATION.md is older than 90 days:
+- Flag in the report
+- Recommend running `/sales qualify [company]` to refresh
+- Do NOT auto-refresh — just flag
+
+---
+
+## Save Report
+
+Save to:
+
+`C:\Users\JeffBrickler\OneDrive - Solutionsx, LLC\ClaudeCoWork\Deal Desk\PIPELINE-REPORT.md`
+
+(Root of Deal Desk, not inside a company subfolder.)
+
+---
+
+## Output File: PIPELINE-REPORT.md
 
 ```markdown
-# Sales Pipeline Report
+# CADTALK Pipeline Report
 
-> Generated on [date] | Prospects Analyzed: [count] | Average Score: [X]/100
+**Date:** [YYYY-MM-DD]
+**Prospects Analyzed:** [n]
+**Total Estimated Pipeline:** $[amount]
+**Avg WGLL Score:** [X]/20
+
+---
 
 ## Executive Summary
-[3-5 paragraphs]
 
-## Pipeline Dashboard
-[Full prospect table]
-
-## Score Distribution
-[Distribution table and analysis]
-
-## Top Prospects
-
-### 1. [Company Name]
-[Detailed snapshot]
-
-[... repeat for top 5]
-
-## Action Items
-[Prioritized list]
-
-## Outreach Status
-[Status table and guidance]
-
-## Pipeline Health
-[Metrics dashboard and assessment]
-
-## Weekly Focus
-[Top 3 prospects with specific actions]
+[3–4 sentences: distribution overview, top opportunity, biggest risk, this week's focus]
 
 ---
 
-## Methodology
+## Pipeline Dashboard
 
-- Company Fit: 25% of score (firmographics, tech stack, growth signals)
-- Contact Access: 20% of score (decision makers, personalization, warm paths)
-- Opportunity Quality: 20% of score (BANT qualification, pain severity, timeline)
-- Competitive Position: 15% of score (current tools, switching costs, advantages)
-- Outreach Readiness: 20% of score (personalization, channel strategy, messaging)
+[Full table sorted by WGLL score descending]
 
-*Report generated by AI Sales Team | Refresh by running `/sales report`*
+---
+
+## WGLL Distribution
+
+[Distribution table + commentary]
+
+---
+
+## Aftermarket Pipeline
+
+[Table]
+
+---
+
+## New ERP/PLM Pipeline
+
+[Table with BANT status]
+
+---
+
+## Ecosystem Breakdown
+
+[ERP breakdown + CAD breakdown tables]
+
+---
+
+## Competitive Landscape
+
+[Incumbent category table + QBuild risk flags]
+
+---
+
+## Action Items This Week
+
+### Advance Now
+[list]
+
+### Begin Outreach
+[list]
+
+### Nurture — Watch For
+[list]
+
+### New ERP — BANT Gaps
+[list]
+
+---
+
+## Pipeline Health
+
+[Metrics table + health assessment]
+
+---
+
+## Pipedrive
+
+| Action | Company | Deal Name |
+|--------|---------|-----------|
+| [Created/Updated/Flagged] | [name] | [deal name] |
+
+---
+
+## Refresh Queue (Stale >90 Days)
+
+| Company | Analysis Date | Days Old |
+|---------|--------------|----------|
+| [name] | [date] | [n days] |
+
+---
+
+*Generated by AI Agent — /sales report — [date]*
 ```
 
 ---
 
-## Quality Standards
+## Terminal Display
 
-1. **Data Integrity:** Only include data actually found in the prospect files. Never fabricate scores, contacts, or details.
-2. **Honest Assessment:** If the pipeline is weak, say so. Don't sugarcoat a pipeline full of C-grade prospects.
-3. **Actionable Output:** Every section must answer "so what?" and "what do I do next?"
-4. **Consistent Formatting:** All tables must be aligned and readable. All scores on the same scale.
-5. **Comparative Analysis:** Help the user understand how prospects compare to each other, not just individual scores.
-6. **Time-Sensitive:** Weekly focus should reflect actual urgency, not just highest scores.
-7. **Complete Coverage:** Every prospect found must appear in the dashboard. No prospect should be silently excluded.
+```
+=== CADTALK PIPELINE REPORT ===
+
+Date:             [YYYY-MM-DD]
+Prospects:        [total]
+Pipeline $:       $[amount]
+Avg WGLL:        [X]/20
+
+Distribution:
+  Advance (16–20): [n] ([%])
+  Qualify (12–15): [n] ([%])
+  Nurture (8–11):  [n] ([%])
+  DQ (0–7):        [n] ([%])
+
+By Pipeline:
+  Aftermarket:     [n] | $[amount]
+  New ERP/PLM:     [n] | $[amount]
+  Expansion:       [n] | $[amount]
+
+Top Prospect:      [name] — WGLL [X]/20 — [trigger]
+Health:            [Excellent|Good|Needs Attention|Critical]
+
+This Week:
+  1. [top action]
+  2. [second action]
+  3. [third action]
+
+Pipedrive Created: [n] new deals
+Stale Alerts:      [n] analyses need refresh
+
+Report: [full file path]
+================================
+```
 
 ---
 
-## Important Rules
+## Error Handling
 
-1. Read ALL prospect files before starting the report. Do not write the report incrementally.
-2. If a prospect file is malformed or missing key data, include the prospect with a note about missing data rather than excluding it.
-3. Sort prospects by score in all tables (highest first).
-4. Use consistent number formatting (scores as integers, percentages with one decimal).
-5. The report should be 250-350 lines of substantive content.
-6. Write the file to disk using the Write tool. Confirm to the user what was written.
-7. After writing, give the user a brief verbal summary of the pipeline status and top recommendation.
-8. If you find more than 20 prospect files, still include all of them but note that a large pipeline benefits from segmentation.
+- No Deal Desk files found: report "Pipeline Empty" with instructions to run `/sales qualify <company>`
+- Pipedrive MCP unavailable: proceed with Deal Desk data only; note Pipedrive sync was skipped
+- File missing required fields: include in report with "[data unavailable]" and flag for refresh
+- Duplicate companies in Deal Desk: surface the most recent analysis; note the older one
